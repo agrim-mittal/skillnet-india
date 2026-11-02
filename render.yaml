@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: skillnet-india
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-haiku-5-5
+      - key: ASSISTANT_RATE_PER_MIN
+        value: "6"
+      - key: ASSISTANT_DAILY_CAP
+        value: "300"
