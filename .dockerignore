@@ -1,8 +1,6 @@
-**/node_modules
+frontend/node_modules
 frontend/dist
+**/__pycache__
 data/raw
-data/external
+data/external/india_ds_jobs_2025.csv
 .git
-.env
-__pycache__
-*.pyc

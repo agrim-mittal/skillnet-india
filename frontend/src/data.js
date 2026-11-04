@@ -3,6 +3,17 @@ import { createContext, useContext } from "react";
 
 const API = import.meta.env.VITE_API_URL || "";
 const url = (name) => (API ? `${API}/api/data/${name}` : `./data/${name}.json`);
+// Where the FastAPI backend lives: VITE_API_URL if set, otherwise the same server that served this page.
+export const apiBase = API || ".";
+
+// Is a backend with an LLM agent reachable? (Render/Docker: yes; GitHub Pages / static demo: no -> offline engine)
+export async function detectBackend() {
+  try {
+    const r = await fetch(`${apiBase}/api/health`, { headers: { accept: "application/json" } });
+    if (!r.ok || !(r.headers.get("content-type") || "").includes("json")) return null;
+    return await r.json();
+  } catch { return null; }
+}
 
 export async function loadAll() {
   const names = ["meta", "skills", "gap", "states", "clusters", "districts", "forecasts", "emerging", "priority", "roles", "salary", "geo_states", "geo_districts"];

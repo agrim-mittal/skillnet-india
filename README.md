@@ -49,6 +49,38 @@ docker compose up --build                           # http://localhost:8000
 
 Set `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` + `OPENAI_BASE_URL` for any OpenAI-compatible model) to turn on the LLM agent.
 
+## Login and roles
+
+Everyone signs in first. Four roles see different pages; the API enforces the same rules.
+
+| Role | Pages | API access |
+|---|---|---|
+| Government | All 9 pages | Everything, incl. budget optimiser |
+| College / Training provider | Map, Skill Gap, Demand, Training, Simulator, Career, Assistant, Methodology | Data, simulator, career, assistant |
+| Industry / Employer | Map, Skill Gap, Demand, Training, Assistant, Methodology | Data, assistant |
+| Student / Job seeker | Map, Demand, Career, Assistant, Methodology | Data, career, assistant |
+
+- **Authentication:** passwords hashed with PBKDF2-SHA256 (200k iterations, per-user salt); sessions are signed JWTs (HS256) that expire after 12 hours; 5 wrong passwords in 5 minutes locks the email for 15 minutes.
+- **Authorisation:** every protected endpoint checks the token's role (`require_roles` in `backend/app/auth.py`); the web app hides pages a role can't open and redirects if one is typed in.
+- **Government accounts** can't be self-registered: they need `GOV_INVITE_CODE`, set on the server.
+- **Demo accounts** (password `Demo@123`): govt@skillnet.in, college@skillnet.in, industry@skillnet.in, student@skillnet.in. Turn off with `DEMO_ACCOUNTS=0`.
+- **Users** are stored in SQLite (`USERS_DB`, default `data/users.db`). On Render's free plan the disk resets on each deploy, so registered users are wiped (demo accounts come back); attach a persistent disk or move users to Postgres for production.
+- **Static hosting** (claude.ai preview, GitHub Pages) has no server, so the login runs in **demo mode**: simulated in the browser, labelled as such, protecting nothing.
+- **Env vars:** `JWT_SECRET` (Render generates it), `GOV_INVITE_CODE`, `USERS_DB`, `DEMO_ACCOUNTS`, `TOKEN_HOURS`, `CORS_ORIGINS`, `LLM_TIMEOUT`.
+
+Tests: `python -m pytest tests -q` (login, registration rules, lock-out, role permissions, assistant fallback).
+
+## Deploy
+
+| Option | What you get | Steps |
+|---|---|---|
+| **GitHub Pages** (free, static) | The full dashboard; assistant uses its offline engine | Push to GitHub → Settings › Pages › Source: *GitHub Actions*. `.github/workflows/pages.yml` builds and publishes on every push to `main`. |
+| **Render** (free, full stack) | Dashboard + API at one URL (`/api/docs`), LLM assistant if you add a key | Push to GitHub → render.com › New › **Blueprint** → pick the repo. `render.yaml` builds the `Dockerfile`. Optionally set `ANTHROPIC_API_KEY`. The free plan sleeps when idle, so the first visit takes about a minute. |
+| Any Docker host (Railway, Fly, a VM) | Same as Render | `docker build -t skillnet . && docker run -p 8000:8000 skillnet` (honours `$PORT`) |
+
+The production image installs only `requirements-api.txt` (no PyTorch etc.). The pipeline outputs in `data/processed/` and
+`frontend/public/data/` are committed, so the server doesn't need to rerun the ML pipeline.
+
 ## Using the real datasets
 
 Put files here and rerun `python -m pipeline.run_all`. The loaders replace the synthetic tables automatically.

@@ -196,11 +196,11 @@ function NationalPanel({ go, setSelState }) {
         <div className="eyebrow">All India</div>
         <div className="text-[15px] font-semibold">Largest skill shortages</div>
         <div className="text-[11.5px] text-muted mb-2">Persons per year, openings minus available</div>
-        <BarList rows={short} colorFn={(r) => sgiColor(r.sgi)} onClick={(r) => go("gap", { skill: r.label })} />
+        <BarList rows={short} colorFn={(r) => sgiColor(r.sgi)} onClick={data.can("gap") ? (r) => go("gap", { skill: r.label }) : undefined} />
       </div>
       <div>
         <div className="text-[13px] font-semibold mb-1.5">Largest surpluses</div>
-        <BarList rows={surplus.map((r) => ({ ...r, value: -r.value }))} colorFn={(r) => sgiColor(r.sgi)} onClick={(r) => go("gap", { skill: r.label })} />
+        <BarList rows={surplus.map((r) => ({ ...r, value: -r.value }))} colorFn={(r) => sgiColor(r.sgi)} onClick={data.can("gap") ? (r) => go("gap", { skill: r.label }) : undefined} />
       </div>
       <div>
         <div className="text-[13px] font-semibold mb-1.5 flex items-center gap-1.5"><Sparkles size={13} className="text-cyan" />States heading for the tightest market</div>
@@ -238,8 +238,8 @@ function StatePanel({ st, go }) {
       {short.length > 0 && (
         <div>
           <div className="text-[13px] font-semibold mb-1.5">Top shortages <span className="text-muted font-normal">(persons / yr)</span></div>
-          <BarList rows={short} colorFn={(r) => sgiColor(r.sgi)} onClick={(r) => go("simulator", { state: st, skill: r.label })} />
-          <div className="text-[11px] text-muted mt-1">Click a skill to simulate a training programme.</div>
+          <BarList rows={short} colorFn={(r) => sgiColor(r.sgi)} onClick={data.can("simulator") ? (r) => go("simulator", { state: st, skill: r.label }) : undefined} />
+          {data.can("simulator") && <div className="text-[11px] text-muted mt-1">Click a skill to simulate a training programme.</div>}
         </div>
       )}
       {s.top_surpluses.length > 0 && (
@@ -249,8 +249,9 @@ function StatePanel({ st, go }) {
         </div>
       )}
       <div className="grid grid-cols-2 gap-2 pt-1">
-        <button onClick={() => go("priority", { state: st })} className="rounded-lg bg-accent px-3 py-2 text-[12.5px] font-medium hover:brightness-110">Recommendations</button>
-        <button onClick={() => go("gap", { state: st })} className="rounded-lg border border-line px-3 py-2 text-[12.5px] hover:border-accent">Full gap table</button>
+        {data.can("priority") && <button onClick={() => go("priority", { state: st })} className="rounded-lg bg-accent px-3 py-2 text-[12.5px] font-medium hover:brightness-110">Recommendations</button>}
+        {data.can("gap") && <button onClick={() => go("gap", { state: st })} className="rounded-lg border border-line px-3 py-2 text-[12.5px] hover:border-accent">Full gap table</button>}
+        {!data.can("gap") && data.can("career") && <button onClick={() => go("career")} className="col-span-2 rounded-lg bg-accent px-3 py-2 text-[12.5px] font-medium hover:brightness-110">Find careers here</button>}
       </div>
     </div>
   );

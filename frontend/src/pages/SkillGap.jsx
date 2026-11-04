@@ -71,7 +71,7 @@ export default function SkillGap() {
         <Panel eyebrow={scope} title="Where the gap is largest" right={<span className="text-[11px] text-muted">persons / year</span>}>
           <div className="text-[12px] text-ink2 mb-2 font-medium">Shortage (openings exceed available workers)</div>
           <BarList rows={top.map((r) => ({ label: r.label, value: Math.max(r.shortage, 0), sgi: r.sgi, r }))} colorFn={(x) => sgiColor(x.sgi)}
-            onClick={(x) => (state ? go("simulator", { state, skill: x.label }) : skill ? go("simulator", { state: x.label, skill }) : setSkill(x.label))} />
+            onClick={(x) => (state ? (data.can("simulator") && go("simulator", { state, skill: x.label })) : skill ? (data.can("simulator") && go("simulator", { state: x.label, skill })) : setSkill(x.label))} />
           {bottom.length > 0 && <>
             <div className="text-[12px] text-ink2 mt-4 mb-2 font-medium">Surplus (more workers than openings)</div>
             <BarList rows={bottom.map((r) => ({ label: r.label, value: -r.shortage, sgi: r.sgi }))} colorFn={(x) => sgiColor(x.sgi)} />

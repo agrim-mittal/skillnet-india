@@ -88,8 +88,25 @@ def run_tool(name, a):
     return {"error": f"unknown tool {name}"}
 
 
+def _clean_history(history, max_turns=6, max_chars=2000):
+    """Keep only well-formed user/assistant text turns, alternating, starting with the user (LLM APIs require this)."""
+    out = []
+    for m in history or []:
+        if not isinstance(m, dict) or m.get("role") not in ("user", "assistant"):
+            continue
+        c = str(m.get("content") or "").strip()[:max_chars]
+        if not c or (out and out[-1]["role"] == m["role"]):
+            continue
+        out.append({"role": m["role"], "content": c})
+    while out and out[0]["role"] != "user":
+        out.pop(0)
+    if out and out[-1]["role"] == "user":
+        out.pop()
+    return out[-2 * max_turns:]
+
+
 def answer(question, history=None):
-    history = history or []
+    history = _clean_history(history)
     if os.getenv("ANTHROPIC_API_KEY"):
         return _anthropic(question, history)
     if os.getenv("OPENAI_API_KEY"):
@@ -99,7 +116,7 @@ def answer(question, history=None):
 
 def _anthropic(question, history):
     import anthropic
-    client = anthropic.Anthropic()
+    client = anthropic.Anthropic(timeout=float(os.getenv("LLM_TIMEOUT", "40")), max_retries=1)
     model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
     msgs = history + [{"role": "user", "content": question}]
     evidence = []
@@ -120,7 +137,7 @@ def _anthropic(question, history):
 
 def _openai(question, history):
     from openai import OpenAI
-    client = OpenAI(base_url=os.getenv("OPENAI_BASE_URL") or None)
+    client = OpenAI(base_url=os.getenv("OPENAI_BASE_URL") or None, timeout=float(os.getenv("LLM_TIMEOUT", "40")), max_retries=1)
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     tools = [{"type": "function", "function": {"name": t["name"], "description": t["description"], "parameters": t["input_schema"]}} for t in TOOLS]
     msgs = [{"role": "system", "content": SYSTEM}] + history + [{"role": "user", "content": question}]

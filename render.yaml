@@ -1,15 +1,17 @@
+# Render Blueprint: New > Blueprint > pick this repo. Free plan works (no database needed).
 services:
   - type: web
     name: skillnet-india
     runtime: docker
     plan: free
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     envVars:
-      - key: ANTHROPIC_API_KEY
+      - key: JWT_SECRET             # signs login sessions; generated once by Render
+        generateValue: true
+      - key: GOV_INVITE_CODE        # needed to create Government accounts (share only with officials)
         sync: false
-      - key: ANTHROPIC_MODEL
-        value: claude-haiku-5-5
-      - key: ASSISTANT_RATE_PER_MIN
-        value: "6"
-      - key: ASSISTANT_DAILY_CAP
-        value: "300"
+      - key: ANTHROPIC_API_KEY      # optional: turns on the LLM assistant
+        sync: false
+      - key: OPENAI_API_KEY         # optional alternative (any OpenAI-compatible endpoint)
+        sync: false

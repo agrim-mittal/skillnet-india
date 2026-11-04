@@ -1,54 +1,53 @@
 """SkillNet India API.  Run:  uvicorn backend.app.main:app --reload --port 8000"""
 import os
-import time
-from collections import defaultdict, deque
 from typing import Optional
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from . import assistant, data
+from . import assistant, auth, data
+from .auth import current_user, require_roles
 
 app = FastAPI(title="SkillNet India API", version="1.0",
               description="National skill-gap intelligence: demand (job postings + NLP), supply (PLFS), forecasts, recommendations.")
-# CORS: in the single-container deploy the app and API share one origin, so no CORS is needed.
-# For local dev (Vite on :5173) or a separately hosted frontend, set ALLOWED_ORIGINS="https://your-site.com,http://localhost:5173".
-ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if o.strip()]
-app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["GET", "POST"], allow_headers=["content-type"])
+app.add_middleware(CORSMiddleware, allow_origins=os.getenv("CORS_ORIGINS", "*").split(","), allow_methods=["*"], allow_headers=["*"])
+auth.init_db()
 
-# Cost protection for the LLM endpoint (in-memory, resets on restart; also set a spend cap at your LLM provider).
-RATE_PER_MIN = int(os.getenv("ASSISTANT_RATE_PER_MIN", "6"))      # per client IP
-DAILY_CAP = int(os.getenv("ASSISTANT_DAILY_CAP", "300"))          # all users combined, per 24h
-_hits: dict = defaultdict(deque)
-_day: deque = deque()
+GOV = ("government",)
+ANALYSTS = ("government", "college")
+CAREER = ("government", "college", "student")
 
 
-def _check_limits(ip: str):
-    now = time.time()
-    q = _hits[ip]
-    while q and now - q[0] > 60:
-        q.popleft()
-    while _day and now - _day[0] > 86400:
-        _day.popleft()
-    if len(q) >= RATE_PER_MIN:
-        raise HTTPException(429, "Too many questions, please wait a minute.")
-    if len(_day) >= DAILY_CAP:
-        raise HTTPException(429, "The assistant has reached today's usage limit. Offline mode still works.")
-    q.append(now)
-    _day.append(now)
-    if len(_hits) > 5000:  # keep memory bounded
-        for k in [k for k, v in _hits.items() if not v or now - v[-1] > 60]:
-            _hits.pop(k, None)
+# ------------------------------------------------------------------ authentication
+@app.post("/api/auth/register")
+def register(p: auth.RegisterIn):
+    return auth.register(p)
+
+
+@app.post("/api/auth/login")
+def login(p: auth.LoginIn):
+    return auth.login(p)
+
+
+@app.get("/api/auth/me")
+def me(user=Depends(current_user)):
+    return user
+
+
+@app.get("/api/auth/roles")
+def roles():
+    return {k: {"label": v["label"], "pages": v["pages"], "self_service": k in auth.SELF_SERVICE_ROLES} for k, v in auth.ROLES.items()}
 
 
 @app.get("/api/health")
 def health():
     m = data.web("meta")
     return {"status": "ok", "generated_at": m["generated_at"], "counts": m["counts"],
-            "assistant": "llm" if (os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY")) else "offline"}
+            "assistant": "llm" if (os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY")) else "offline",
+            "auth": "jwt", "auth_secret_persistent": not auth.SECRET_IS_EPHEMERAL}
 
 
 @app.get("/api/data/{name}")
@@ -60,12 +59,12 @@ def web_file(name: str):
 
 
 @app.get("/api/states")
-def list_states():
+def list_states(user=Depends(current_user)):
     return data.web("states")
 
 
 @app.get("/api/states/{state}")
-def get_state(state: str):
+def get_state(state: str, user=Depends(current_user)):
     s = data.resolve(state, data.states())
     if not s:
         raise HTTPException(404, "unknown state")
@@ -75,7 +74,7 @@ def get_state(state: str):
 
 @app.get("/api/gap")
 def gap(state: Optional[str] = None, skill: Optional[str] = None, cluster: Optional[str] = None,
-        include_low: bool = False, limit: int = 200):
+        include_low: bool = False, limit: int = 200, user=Depends(current_user)):
     s = data.resolve(state, data.states()) if state else None
     k = data.resolve_skill(skill) if skill else None
     g = data.gap_rows(state=s, skill=k, cluster=cluster, include_low=include_low)
@@ -83,7 +82,7 @@ def gap(state: Optional[str] = None, skill: Optional[str] = None, cluster: Optio
 
 
 @app.get("/api/forecast")
-def forecast(skill: Optional[str] = None, state: Optional[str] = None, cluster: Optional[str] = None):
+def forecast(skill: Optional[str] = None, state: Optional[str] = None, cluster: Optional[str] = None, user=Depends(current_user)):
     f = data.forecast(skill=data.resolve_skill(skill) if skill else None,
                       state=data.resolve(state, data.states()) if state else None, cluster=cluster)
     if not f:
@@ -93,7 +92,7 @@ def forecast(skill: Optional[str] = None, state: Optional[str] = None, cluster: 
 
 @app.get("/api/centres")
 def centres(state: Optional[str] = None, skill: Optional[str] = None, lat: Optional[float] = None,
-            lon: Optional[float] = None, k: int = 20):
+            lon: Optional[float] = None, k: int = 20, user=Depends(current_user)):
     if os.getenv("DATABASE_URL") and lat is not None:
         return _postgis_nearest(lat, lon, skill, k)
     c = data.centres(state=data.resolve(state, data.states()) if state else None,
@@ -124,7 +123,7 @@ class SimIn(BaseModel):
 
 
 @app.post("/api/simulate")
-def simulate(p: SimIn):
+def simulate(p: SimIn, user=Depends(require_roles(*ANALYSTS))):
     r = data.simulate(data.resolve(p.state, data.states()), data.resolve_skill(p.skill), p.trainees,
                       p.cost_per_trainee, p.completion, p.placement, p.months)
     if not r:
@@ -142,7 +141,7 @@ class OptIn(BaseModel):
 
 
 @app.post("/api/optimise")
-def optimise(p: OptIn):
+def optimise(p: OptIn, user=Depends(require_roles(*GOV))):
     import sys
     sys.path.insert(0, str(data.ROOT))
     from pipeline import recommend
@@ -166,7 +165,7 @@ class CareerIn(BaseModel):
 
 
 @app.post("/api/career")
-def career(p: CareerIn):
+def career(p: CareerIn, user=Depends(require_roles(*CAREER))):
     role = data.resolve_role(p.role)
     if not role:
         raise HTTPException(404, "unknown role")
@@ -184,18 +183,20 @@ def career(p: CareerIn):
 
 
 class AskIn(BaseModel):
-    question: str = Field(..., min_length=1, max_length=500)
+    question: str
+    history: list = []
 
 
 @app.post("/api/assistant")
-def ask(p: AskIn, request: Request):
-    # Check for a configured LLM first so unconfigured deployments never count against limits.
-    if not (os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY")):
-        raise HTTPException(503, "No LLM configured (set ANTHROPIC_API_KEY or OPENAI_API_KEY). The web app uses its offline engine.")
-    _check_limits(request.client.host if request.client else "unknown")
-    r = assistant.answer(p.question, None)  # client-supplied history is ignored on purpose
+def ask(p: AskIn, user=Depends(current_user)):
+    try:
+        r = assistant.answer(p.question[:2000], p.history)
+    except Exception as e:   # bad key, model name, timeout, provider outage -> the web app falls back to its offline engine
+        raise HTTPException(502, f"LLM call failed: {type(e).__name__}: {str(e)[:300]}")
     if r is None:
         raise HTTPException(503, "No LLM configured (set ANTHROPIC_API_KEY or OPENAI_API_KEY). The web app uses its offline engine.")
+    if not (r.get("answer") or "").strip():
+        raise HTTPException(502, "LLM returned an empty answer.")
     return r
 
 

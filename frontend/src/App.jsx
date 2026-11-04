@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Map, BarChart3, TrendingUp, Building2, Target, SlidersHorizontal, GraduationCap, Bot, Database, Search, FileDown, Radar } from "lucide-react";
+import { Map, BarChart3, TrendingUp, Building2, Target, SlidersHorizontal, GraduationCap, Bot, Database, Search, FileDown, Radar, LogOut, Lock } from "lucide-react";
 import { DataCtx, loadAll } from "./data";
+import { restore, signOut, authHeader } from "./auth";
+import { ROLES, canOpen } from "./roles";
+import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import SkillGap from "./pages/SkillGap";
 import Demand from "./pages/Demand";
@@ -44,21 +47,41 @@ export default function App() {
   const [route, go] = useHashRoute();
   const [selState, setSelState] = useState(null);
   const [report, setReport] = useState(false);
+  const [session, setSession] = useState(undefined);   // undefined = checking, null = signed out
+  const [notice, setNotice] = useState("");
 
   useEffect(() => { loadAll().then(setData).catch((e) => setErr(String(e))); }, []);
+  useEffect(() => { restore().then(setSession).catch(() => setSession(null)); }, []);
   useEffect(() => { if (route.params.state) setSelState(route.params.state); }, [route.params.state]);
+  const user = session?.user;
+  // authorisation in the UI: a page the role can't open sends the user to their home page
+  useEffect(() => {
+    if (user && !canOpen(user, route.page)) {
+      setNotice(`${TITLES[route.page]} isn't available for the ${user.role_label} role.`);
+      go(ROLES[user.role].home);
+    }
+  }, [user, route.page]);
+  useEffect(() => { if (notice) { const t = setTimeout(() => setNotice(""), 4500); return () => clearTimeout(t); } }, [notice]);
 
   if (err) return <div className="p-10 text-crit">Could not load data: {err}</div>;
-  if (!data) return <Loading />;
+  if (!data || session === undefined) return <Loading />;
+  if (!session) {
+    const stateNames = data.states.map((s) => s.state).sort();
+    return <Login meta={{ ...data.meta, __states: stateNames }} geo={data.geo_states}
+      onSession={(s) => { setSession(s); go(ROLES[s.user.role].home); }} />;
+  }
+  if (!canOpen(user, route.page)) return <Loading />;
   const Page = PAGES[route.page];
-  const ctx = { ...data, go, selState, setSelState, params: route.params };
+  const logout = () => { signOut(); setSession(null); };
+  const ctx = { ...data, go, selState, setSelState, params: route.params, session, user, authHeaders: authHeader(session), can: (pg) => canOpen(user, pg) };
 
   return (
     <DataCtx.Provider value={ctx}>
       <div className="flex h-full no-print">
-        <Sidebar page={route.page} go={go} />
+        <Sidebar page={route.page} go={go} user={user} />
         <main className="flex-1 min-w-0 flex flex-col">
-          <TopBar title={TITLES[route.page]} go={go} onReport={() => setReport(true)} />
+          <TopBar title={TITLES[route.page]} go={go} onReport={() => setReport(true)} user={user} onLogout={logout} />
+          {notice && <div role="status" className="mx-4 mt-3 rounded-lg border border-warn/40 bg-warn/10 text-warn px-3 py-2 text-[12.5px] flex items-center gap-2"><Lock size={13} />{notice}</div>}
           <div className="flex-1 min-h-0 overflow-auto"><Page key={route.page + route.n} /></div>
         </main>
       </div>
@@ -93,12 +116,12 @@ function Logo() {
   );
 }
 
-function Sidebar({ page, go }) {
+function Sidebar({ page, go, user }) {
   return (
     <aside className="w-[244px] shrink-0 border-r border-line bg-[#070c1b]/90 flex flex-col">
       <Logo />
       <nav className="flex-1 overflow-auto px-2.5 pb-4">
-        {NAV.map(([section, items]) => (
+        {NAV.map(([section, all]) => [section, all.filter(([id]) => canOpen(user, id))]).filter(([, items]) => items.length).map(([section, items]) => (
           <div key={section} className="mt-3">
             <div className="eyebrow px-2 mb-1.5 text-[9.5px]">{section}</div>
             {items.map(([id, label, Icon]) => (
@@ -115,6 +138,29 @@ function Sidebar({ page, go }) {
         Real 2025 job postings + Census + boundaries; workforce, multi-sector postings & ITIs are synthetic. <button className="text-cyan" onClick={() => go("method")}>Details →</button>
       </div>
     </aside>
+  );
+}
+
+function UserChip({ user, onLogout }) {
+  const [open, setOpen] = useState(false);
+  const R = ROLES[user.role], Icon = R.icon;
+  const initials = user.name.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-2 rounded-xl border border-line pl-1.5 pr-3 py-1.5 hover:border-accent" aria-label="Account">
+        <span className="w-7 h-7 rounded-full grid place-items-center text-[11px] font-bold bg-gradient-to-br from-accent to-violet">{initials}</span>
+        <span className="text-left leading-tight hidden xl:block"><span className="block text-[12.5px] text-ink max-w-[140px] truncate">{user.name}</span><span className="block text-[10.5px] text-cyan">{R.label}</span></span>
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 w-[260px] glass p-3 z-50">
+          <div className="text-[13px] font-semibold">{user.name}</div>
+          <div className="text-[11.5px] text-muted truncate">{user.email}</div>
+          <div className="mt-2 flex items-center gap-1.5 text-[12px] text-cyan"><Icon size={14} />{R.label}</div>
+          <div className="text-[11px] text-muted mt-1">{R.can}</div>
+          <button onClick={onLogout} className="mt-3 w-full flex items-center justify-center gap-1.5 rounded-lg border border-line py-1.5 text-[12.5px] hover:border-crit hover:text-[#f39b93]"><LogOut size={14} />Sign out</button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -143,15 +189,16 @@ function ReportModal({ state, onClose }) {
   );
 }
 
-function TopBar({ title, go, onReport }) {
+function TopBar({ title, go, onReport, user, onLogout }) {
   const { states, skillsList, roles, setSelState } = useContextData();
   const [q, setQ] = useState("");
   const hits = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (t.length < 2) return [];
     const s = states.filter((x) => x.state.toLowerCase().includes(t)).slice(0, 4).map((x) => ({ k: "State", label: x.state, act: () => { setSelState(x.state); go("map", { state: x.state }); } }));
-    const k = skillsList.filter((x) => x.name.toLowerCase().includes(t)).slice(0, 4).map((x) => ({ k: "Skill", label: x.name, act: () => go("gap", { skill: x.name }) }));
-    const r = roles.filter((x) => x.title.toLowerCase().includes(t)).slice(0, 3).map((x) => ({ k: "Career", label: x.title, act: () => go("career", { role: x.role }) }));
+    const skillPage = canOpen(user, "gap") ? "gap" : "demand";
+    const k = skillsList.filter((x) => x.name.toLowerCase().includes(t)).slice(0, 4).map((x) => ({ k: "Skill", label: x.name, act: () => go(skillPage, { skill: x.name }) }));
+    const r = canOpen(user, "career") ? roles.filter((x) => x.title.toLowerCase().includes(t)).slice(0, 3).map((x) => ({ k: "Career", label: x.title, act: () => go("career", { role: x.role }) })) : [];
     return [...s, ...k, ...r];
   }, [q, states, skillsList, roles]);
   return (
@@ -176,6 +223,7 @@ function TopBar({ title, go, onReport }) {
       <button onClick={onReport} className="flex items-center gap-2 rounded-xl border border-line px-3 py-2 text-[12.5px] text-ink2 hover:text-ink hover:border-accent">
         <FileDown size={15} />Export report
       </button>
+      <UserChip user={user} onLogout={onLogout} />
     </header>
   );
 }

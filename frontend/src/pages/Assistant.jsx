@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Send, User, Database, ArrowRight, Sparkles } from "lucide-react";
-import { useData } from "../data";
+import { useData, apiBase, detectBackend } from "../data";
 import { makeEngine } from "../assistantEngine";
 import { ForecastChart } from "../components/charts";
 
 const API = import.meta.env.VITE_API_URL || "";
+const MAX_HISTORY = 6;   // last turns sent to the LLM for follow-up questions
 const SUGGEST = [
   "Which skills are short in Punjab?",
   "What if Punjab trains 10,000 solar technicians?",
@@ -22,8 +23,10 @@ export default function Assistant() {
   const [msgs, setMsgs] = useState([{ role: "bot", a: { text: ["Hi! I answer from SkillNet's own data: skill gaps, forecasts, training centres, careers and what-if scenarios. Every figure shows its source below the answer."] } }]);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
+  const [llm, setLlm] = useState(false);
   const end = useRef(null);
   useEffect(() => { fetch(API ? `${API}/api/data/taxonomy` : "./data/taxonomy.json").then((r) => r.json()).then(setTaxonomy); }, []);
+  useEffect(() => { detectBackend().then((h) => setLlm(h?.assistant === "llm")); }, []);
   const engine = useMemo(() => (taxonomy ? makeEngine(data, taxonomy) : null), [taxonomy, data]);
   useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
 
@@ -32,14 +35,28 @@ export default function Assistant() {
     setMsgs((m) => [...m, { role: "user", text }]);
     setQ(""); setBusy(true);
     let a = null;
-    if (API) {
+    if (llm) {
       try {
-        const r = await fetch(`${API}/api/assistant`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ question: text }) });
-        if (r.ok) { const j = await r.json(); a = { text: j.answer.split("\n"), evidence: j.evidence.map((e) => `${e.tool}(${JSON.stringify(e.input)})`), provider: j.provider }; }
+        // previous question/answer pairs, oldest first, so follow-ups ("and in Bihar?") work
+        const history = [];
+        for (let i = 1; i + 1 < msgs.length; i += 2) {
+          if (msgs[i].role === "user" && msgs[i + 1].role === "bot") {
+            history.push({ role: "user", content: msgs[i].text }, { role: "assistant", content: msgs[i + 1].a.text.filter(Boolean).join("\n") });
+          }
+        }
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), 45000);   // never leave the user waiting forever
+        const r = await fetch(`${apiBase}/api/assistant`, { method: "POST", signal: ctl.signal, headers: { "content-type": "application/json", ...data.authHeaders },
+          body: JSON.stringify({ question: text, history: history.slice(-2 * MAX_HISTORY) }) });
+        clearTimeout(timer);
+        if (r.ok) {
+          const j = await r.json();
+          a = { text: (j.answer || "").split("\n"), evidence: (j.evidence || []).map((e) => `${e.tool}(${JSON.stringify(e.input)})`), provider: j.provider };
+        }
       } catch { /* fall back to offline engine */ }
     }
-    if (!a) a = { ...engine.answer(text), provider: "offline engine" };
-    setTimeout(() => { setMsgs((m) => [...m, { role: "bot", a }]); setBusy(false); }, API ? 0 : 250);
+    if (!a) a = { ...engine.answer(text), provider: llm ? "offline engine (LLM unavailable)" : "offline engine" };
+    setTimeout(() => { setMsgs((m) => [...m, { role: "bot", a }]); setBusy(false); }, llm ? 0 : 250);
   }
 
   return (
@@ -49,7 +66,7 @@ export default function Assistant() {
           {msgs.map((m, i) => m.role === "user" ? (
             <div key={i} className="flex justify-end gap-2"><div className="rounded-2xl rounded-tr-sm bg-accent px-4 py-2.5 text-[13.5px] max-w-[70%]">{m.text}</div><User size={18} className="text-muted mt-2" /></div>
           ) : <BotMsg key={i} a={m.a} data={data} />)}
-          {busy && <div className="flex gap-2 items-center text-muted text-[13px]"><Bot size={18} className="text-cyan" />Looking it up…</div>}
+          {busy && <div className="flex gap-2 items-center text-muted text-[13px]"><Bot size={18} className="text-cyan" />{llm ? "Asking the AI agent (it queries the data first)…" : "Looking it up…"}</div>}
           <div ref={end} />
         </div>
         <form onSubmit={(e) => { e.preventDefault(); ask(q); }} className="border-t border-line p-3 flex gap-2">
@@ -64,7 +81,7 @@ export default function Assistant() {
         </div>
         <div className="panel p-4 text-[12px] text-ink2 leading-relaxed">
           <div className="font-semibold text-ink mb-1 flex items-center gap-1.5"><Database size={14} className="text-cyan" />How it stays grounded</div>
-          It can only answer from SkillNet's datasets: it links states, skills and careers in your question to the data and computes the answer. With an LLM key set on the backend, an LLM agent calls the same data through tools and must cite them. {API ? "Backend connected." : "Running the offline engine (no LLM key needed)."}
+          It can only answer from SkillNet's datasets: it links states, skills and careers in your question to the data and computes the answer. With an LLM key set on the backend, an LLM agent calls the same data through tools and must cite them. {llm ? "LLM agent connected: answers come from the backend's tools." : "Running the offline engine (no LLM key needed)."}
         </div>
       </div>
     </div>
@@ -83,7 +100,7 @@ function BotMsg({ a, data }) {
             <tbody>{a.table.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} className={j ? "num text-right" : "font-medium"}>{c}</td>)}</tr>)}</tbody></table>
         )}
         {f && <div className="mt-2 w-[560px] max-w-full"><ForecastChart hist={f.h} fut={f} histMonths={data.forecasts.hist_months} futMonths={data.forecasts.fut_months} height={200} /></div>}
-        {a.action && <button onClick={() => data.go(a.action.page, a.action.params)} className="mt-1 inline-flex items-center gap-1 text-cyan text-[12.5px]">{a.action.label}<ArrowRight size={13} /></button>}
+        {a.action && data.can(a.action.page) && <button onClick={() => data.go(a.action.page, a.action.params)} className="mt-1 inline-flex items-center gap-1 text-cyan text-[12.5px]">{a.action.label}<ArrowRight size={13} /></button>}
         {a.evidence?.length > 0 && <div className="pt-2 mt-1 border-t border-line text-[11px] text-muted"><span className="eyebrow">Sources</span> {a.evidence.join(" · ")}{a.provider && ` · ${a.provider}`}</div>}
       </div>
     </div>
