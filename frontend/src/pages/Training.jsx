@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, School, GraduationCap, AlertTriangle } from "lucide-react";
+import { Building2, School, GraduationCap, AlertTriangle, X } from "lucide-react";
 import MapView from "../components/MapView";
 import { useData, loadCentres } from "../data";
-import { Panel, Kpi, StateSelect, SkillSelect, BarList, DemoNote, SeqLegend } from "../components/ui";
-import { fmt, SERIES, seqColor, SEQ_BLUE } from "../theme";
+import { Panel, Kpi, StateSelect, SkillSelect, BarList, SeqLegend, InfoBox } from "../components/ui";
+import { fmt, SERIES, STATUS, seqColor, SEQ_BLUE } from "../theme";
 
-const TYPE_COLOR = { "Govt ITI": SERIES[0], "Private ITI": SERIES[2], Polytechnic: SERIES[1] };
+const typeColor = () => ({ "Govt ITI": SERIES[0], "Private ITI": SERIES[2], Polytechnic: SERIES[1] });
 
 export default function Training() {
   const data = useData();
   const [state, setState] = useState(data.params.state || data.selState || null);
   const [skill, setSkill] = useState(null);
   const [centres, setCentres] = useState(null);
+  const [pickD, setPickD] = useState(null);
+  const TYPE_COLOR = typeColor();
   useEffect(() => { loadCentres().then(setCentres); }, []);
 
   const pts = useMemo(() => centres?.filter((c) => (!state || c.state === state) && (!skill || c.skills.includes(skill)))
@@ -46,39 +48,45 @@ export default function Training() {
     <div className="p-4 space-y-4">
       <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-4">
         <div className="panel relative overflow-hidden h-[600px]">
-          <MapView geoStates={data.geo_states} geoDistricts={data.geo_districts} stateColor={stateColor} selected={state} onSelect={setState}
-            points={pts} pointColor={(p) => TYPE_COLOR[p.type]}
-            tooltip={(k, p) => k === "state" && <div><b>{p.state}</b><div className="num text-muted">{(seatsPerLakh[p.state] || 0).toFixed(0)} training seats per lakh population</div></div>}
-            pointTooltip={(p) => <div><b>{p.name}</b><div className="text-muted">{p.type} · {p.seats} seats</div><div className="text-[11px] text-ink2 mt-1">{p.skills}</div></div>} />
+          <MapView geoStates={data.geo_states} geoDistricts={data.geo_districts} stateColor={stateColor} selected={state} onSelect={setState} mode={data.mode}
+            points={pts} pointColor={(p) => typeColor()[p.type]} label="Map of training centres" padTop={80}
+            tooltip={(k, p) => k === "state" && <div><b>{p.state}</b><div className="num text-muted">{(seatsPerLakh[p.state] || 0).toFixed(0)} training seats per lakh people</div></div>}
+            pointTooltip={(p) => <div><b>{p.name}</b><div className="text-muted">{p.type} · {p.seats} seats</div><div className="text-[12px] text-ink2 mt-1">{p.skills}</div></div>} />
+          {state && <button onClick={() => setState(null)} className="absolute top-3 right-3 glass px-3 py-2 text-[14px] font-medium flex items-center gap-1.5 hover:border-accent"><X size={15} />Back to India</button>}
           <div className="absolute top-3 left-3 glass p-3 flex gap-2 items-center">
             <StateSelect value={state} onChange={setState} />
-            <SkillSelect value={skill} onChange={setSkill} allLabel="Any trade / skill" />
+            <SkillSelect value={skill} onChange={setSkill} allLabel="Any skill" />
           </div>
           <div className="absolute bottom-3 left-3 glass p-3 w-[280px] space-y-2">
-            <SeqLegend title="State fill: training seats per lakh population" ramp={SEQ_BLUE.slice(0, 5)} lo="fewer" hi="more" />
-            <div className="flex gap-3 text-[11px] text-ink2">{Object.entries(TYPE_COLOR).map(([k, c]) => <span key={k} className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: c }} />{k}</span>)}</div>
+            <SeqLegend title="Training seats per person" ramp={SEQ_BLUE.slice(0, 5)} lo="fewer" hi="more" />
+            <div className="flex gap-3 text-[12px] text-ink2">{Object.entries(TYPE_COLOR).map(([k, c]) => <span key={k} className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: c }} />{k}</span>)}</div>
           </div>
         </div>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Kpi icon={Building2} label="Centres shown" value={fmt.int(pts.length)} sub={state || "All India"} />
-            <Kpi icon={School} label="Seats" value={fmt.compact(kpi.seats)} sub={`${Math.round(kpi.util * 100)}% avg utilisation`} />
-            <Kpi icon={GraduationCap} label="Certified per year" value={fmt.compact(kpi.out)} sub="seats × utilisation × pass rate" />
-            <Kpi label="Govt / Private ITI / Poly" value={`${kpi.byType["Govt ITI"]?.n || 0} / ${kpi.byType["Private ITI"]?.n || 0} / ${kpi.byType["Polytechnic"]?.n || 0}`} />
+            <Kpi icon={Building2} label="Training centres" value={fmt.int(pts.length)} sub={state || "All India"} />
+            <Kpi icon={School} label="Seats" value={fmt.compact(kpi.seats)} sub={`${Math.round(kpi.util * 100)}% filled`} />
+            <div className="col-span-2"><Kpi icon={GraduationCap} label="People who finish training each year" value={fmt.compact(kpi.out)} /></div>
           </div>
-          <Panel eyebrow={state || "All India"} title="Lowest training coverage" right={<span className="text-[11px] text-muted">graduates ÷ openings</span>}>
-            <BarList rows={coverage} max={1} valueFmt={(v) => `${Math.round(v * 100)}%`} colorFn={(r) => (r.value < 0.1 ? "#d03b3b" : r.value < 0.3 ? "#ec835a" : SERIES[2])} />
-            <div className="text-[11px] text-muted mt-2">Share of each year's openings that local ITIs/polytechnics can fill. Red = under 10%.</div>
+          <Panel eyebrow={state || "All India"} title="Skills with too little training"
+            info={<>For each skill: how many of the year's jobs local ITIs and polytechnics can fill. 20% means trainees cover only 1 in 5 jobs. Red bars are under 10%.</>}>
+            <BarList rows={coverage} max={1} valueFmt={(v) => `${Math.round(v * 100)}%`} colorFn={(r) => (r.value < 0.1 ? STATUS.critical : r.value < 0.3 ? STATUS.serious : SERIES[2])} />
           </Panel>
         </div>
       </div>
-      <Panel eyebrow="Where to build or expand centres" title={<span className="flex items-center gap-1.5"><AlertTriangle size={15} className="text-warn" />Training deserts: high demand, few seats</span>} right={<DemoNote />}>
+      <Panel title={<span className="flex items-center gap-1.5"><AlertTriangle size={16} className="text-warn" />Places that need more training centres</span>}
+        info={<>Districts with many job posts but few training seats for the number of people who live there. Click a row for details.</>}>
+        {pickD && (() => { const d = deserts.find((x) => x.code === pickD); return d && (
+          <InfoBox onClose={() => setPickD(null)}>
+            <b className="text-ink">{d.name}, {d.state}</b> had <b className="num">{fmt.int(d.postings12)}</b> job posts last year but has only <b className="num">{d.centres}</b> training centres
+            (<b className="num">{d.spl.toFixed(0)}</b> seats per lakh people). Most jobs are in {Object.entries(d.byCluster || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c]) => data.clusters[c]).join(", ")}.
+          </InfoBox>); })()}
         <table className="data">
-          <thead><tr><th>District</th><th>State</th><th className="!text-right">Postings (12 mo)</th><th className="!text-right">Per lakh pop.</th><th className="!text-right">Centres</th><th className="!text-right">Seats per lakh</th><th>Main sectors hiring</th></tr></thead>
+          <thead><tr><th>District</th><th>State</th><th className="!text-right">Job posts (1 yr)</th><th className="!text-right">Training centres</th><th className="!text-right">Seats per lakh people</th></tr></thead>
           <tbody>{deserts.map((d) => (
-            <tr key={d.code}><td className="font-medium">{d.name}</td><td className="text-ink2">{d.state}</td><td className="num text-right">{fmt.int(d.postings12)}</td>
-              <td className="num text-right">{d.dpl.toFixed(1)}</td><td className="num text-right">{d.centres}</td><td className="num text-right text-[#f39b93]">{d.spl.toFixed(0)}</td>
-              <td className="text-[11.5px] text-muted">{Object.entries(d.byCluster || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c]) => data.clusters[c]).join(", ")}</td></tr>
+            <tr key={d.code} onClick={() => setPickD(d.code)} className={`cursor-pointer ${pickD === d.code ? "bg-panel2" : ""}`}>
+              <td className="font-medium"><button className="text-left hover:text-cyan" onClick={() => setPickD(d.code)}>{d.name}</button></td><td className="text-ink2">{d.state}</td><td className="num text-right">{fmt.int(d.postings12)}</td>
+              <td className="num text-right">{d.centres}</td><td className="num text-right text-short font-semibold">{d.spl.toFixed(0)}</td></tr>
           ))}</tbody>
         </table>
       </Panel>

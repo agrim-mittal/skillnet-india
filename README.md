@@ -17,17 +17,23 @@ Monthly postings ─► ETS / XGBoost / GRU (backtested) ─► 12-month demand 
 
 | Section | Page | What it does |
 |---|---|---|
-| Overview | **India Skill Map** | Clickable, zoomable map; layers: Gap Index now / in 12 months, job demand, skilled workforce, demand growth; ITI points; district drill-down; 3D demand towers |
-| Skill intelligence | **Skill Gap Analysis** | Shortage/surplus ranking, state × sector heatmap, full gap table with evidence levels |
-| | **Demand & Forecasts** | 12-month forecast with 80% interval per skill or state × sector; rising/declining skills; NLP-discovered emerging terms |
-| | **Training Infrastructure** | 18.6k ITIs/polytechnics on the map, training coverage per skill, "training deserts" |
-| Decision intelligence | **Priority Recommendations** | Editable policy weights → ranked state × skill list with score breakdown; budget optimiser (₹ crore → trainees, placements); CSV export |
-| | **What-If Simulator** | "What if Punjab trains 10,000 solar technicians?" → gap closed, cost per placement, 24-month projection, better uses of the same budget |
-| User services | **Student Career Path** | Skills you have → closest careers, match %, ordered learning path (Skill2Vec), pay, where jobs are, nearby centres |
-| | **AI Skill Assistant** | Chat answers grounded in the platform's data (offline engine; LLM tool-calling agent when a key is set) |
-| Others | **Data & Methodology** | Provenance (real vs synthetic), model cards with metrics, forecast backtest, assumptions, limitations |
+| Explore | **India Skill Map** | Clickable, zoomable map; layers: Gap Index now / in 12 months, job demand, skilled workforce, demand growth; ITI points; district drill-down; 3D demand towers |
+| | **Skill Gaps** | Shortage/surplus ranking, state × sector heatmap, full gap table with evidence levels |
+| | **Job Trends** | 12-month forecast with 80% interval per skill or state × sector; rising/declining skills; NLP-discovered emerging terms |
+| | **Training Centres** | 18.6k ITIs/polytechnics on the map, training coverage per skill, "training deserts" |
+| Plan | **What to Fund** | Editable policy weights → ranked state × skill list with score breakdown; budget optimiser (₹ crore → trainees, placements); CSV export |
+| | **Try a Plan** | "What if Punjab trains 10,000 solar technicians?" → gap closed, cost per placement, 24-month projection, better uses of the same budget |
+| For you | **Find a Career** | Skills you have → closest careers, match %, ordered learning path (Skill2Vec), pay, where jobs are, nearby centres |
+| | **Ask SkillNet** | Chat answers grounded in the platform's data (offline engine; LLM tool-calling agent when a key is set) |
+| About | **About the Data** | Provenance (real vs synthetic), model cards with metrics, forecast backtest, assumptions, limitations |
 
-"Export report" (top bar) prints a state brief.
+"Report" (top bar) prints a state brief.
+
+### Interface
+- **Light and dark modes** in an India theme (saffron, white, green, navy). The toggle is in the top bar and on the sign-in page; the choice is remembered and the first visit follows the device setting. In both modes saffron means shortage and green means extra workers.
+- **Plain language, less text.** Each page opens with its main list, map or chart. Explanations appear only when asked for: the ⓘ buttons, "How to use" in the top bar, fold-out sections, and detail cards that open when you click a state, skill or row.
+- **Map that can't get lost.** Panning is limited to India's area, rotation is off, a target button recentres on India (or the chosen state), and a "Back to …" button appears if the area you're looking at leaves the screen. States can also be picked from a list.
+- **Accessibility.** Larger text, visible keyboard focus, a skip link, labelled controls, screen-reader-friendly switches and tabs, colour plus words for meaning, and reduced motion when the device asks for it.
 
 ## Quick start
 

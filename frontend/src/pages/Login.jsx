@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Radar, Eye, EyeOff, ShieldCheck, Info, ArrowRight, Loader2 } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck, Info, ArrowRight, Loader2, Sun, Moon } from "lucide-react";
 import { ROLES, DEMO_USERS, DEMO_PASSWORD, SELF_SERVICE } from "../roles";
 import { signIn, signUp, authMode } from "../auth";
-import { fmt } from "../theme";
+import { fmt, C } from "../theme";
+import { Chakra } from "../components/Chakra";
 
 // Glowing India outline drawn from the state boundaries (equirectangular projection, cos-latitude corrected)
 function IndiaGlow({ geo }) {
@@ -18,20 +19,19 @@ function IndiaGlow({ geo }) {
   return (
     <svg viewBox="0 0 370 420" className="w-full h-full" aria-hidden="true">
       <defs>
-        <filter id="glow"><feGaussianBlur stdDeviation="3.2" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-        <linearGradient id="fillg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#3987e5" stopOpacity="0.35" /><stop offset="1" stopColor="#22d3ee" stopOpacity="0.12" /></linearGradient>
+        <linearGradient id="fillg" gradientUnits="userSpaceOnUse" x1="0" y1="5" x2="0" y2="385">
+          <stop offset="0" stopColor="#ff9933" stopOpacity="0.85" /><stop offset="0.36" stopColor="#ff9933" stopOpacity="0.85" />
+          <stop offset="0.36" stopColor="#ffffff" stopOpacity="0.9" /><stop offset="0.64" stopColor="#ffffff" stopOpacity="0.9" />
+          <stop offset="0.64" stopColor={C.outlineFill2} stopOpacity="0.85" /><stop offset="1" stopColor={C.outlineFill2} stopOpacity="0.85" />
+        </linearGradient>
       </defs>
-      <g filter="url(#glow)">
-        {paths.map((p) => <path key={p.id} d={p.d} fill="url(#fillg)" stroke="#5aa7ff" strokeOpacity="0.85" strokeWidth="0.7" />)}
-      </g>
-      {[[152, 312], [118, 238], [104, 96], [196, 330], [260, 205], [176, 182], [92, 268]].map(([x, y], i) => (
-        <g key={i}><circle cx={x} cy={y} r="2.6" fill="#22d3ee" /><line x1={x} x2={x} y1={y} y2={y - 18 - (i % 3) * 12} stroke="#22d3ee" strokeOpacity="0.55" strokeWidth="1.2" /></g>
-      ))}
+      {paths.map((p) => <path key={p.id} d={p.d} fill="url(#fillg)" stroke={C.outlineStroke} strokeOpacity="0.55" strokeWidth="0.7" />)}
+      <g transform="translate(130 176)" color="#0b2a6b"><Chakra size={40} /></g>
     </svg>
   );
 }
 
-export default function Login({ meta, geo, onSession }) {
+export default function Login({ meta, geo, onSession, mode: themeMode, onToggleMode }) {
   const [tab, setTab] = useState("signin");
   const [mode, setMode] = useState(null);
   const [email, setEmail] = useState("");
@@ -50,33 +50,35 @@ export default function Login({ meta, geo, onSession }) {
   const states = meta.__states || [];
 
   return (
-    <div className="min-h-full grid grid-cols-1 lg:grid-cols-[1.15fr_1fr]">
-      <section className="relative hidden lg:flex flex-col justify-between p-10 overflow-hidden border-r border-line bg-[radial-gradient(900px_600px_at_30%_40%,#10234d_0%,transparent_60%)]">
+    <div className="min-h-full flex flex-col relative"><div className="tricolour" aria-hidden="true" />
+    <button onClick={onToggleMode} className="absolute top-4 right-4 z-10 flex items-center gap-1.5 rounded-xl border border-line bg-panel px-3 py-2 text-[13.5px] text-ink2 hover:border-accent" aria-label={`Switch to ${themeMode === "dark" ? "light" : "dark"} mode`}>{themeMode === "dark" ? <Sun size={15} /> : <Moon size={15} />}{themeMode === "dark" ? "Light" : "Dark"}</button>
+    <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1.15fr_1fr]">
+      <section className="relative hidden lg:flex flex-col justify-between p-10 overflow-hidden border-r border-line bg-panel2">
         <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-xl grid place-items-center bg-gradient-to-br from-accent to-violet shadow-[0_0_24px_#3987e566]"><Radar size={20} className="text-white" /></div>
-          <div><div className="font-bold text-[17px]">SkillNet <span className="text-cyan">India</span></div><div className="text-[11px] text-muted">National Skill Intelligence</div></div>
+          <Chakra size={40} className="text-accent" />
+          <div><div className="font-bold text-[18px]"><span className="text-cyan">Skill</span>Net <span className="text-good">India</span></div><div className="text-[13px] text-muted">Jobs and skills, state by state</div></div>
         </div>
         <div className="grid grid-cols-[1fr_330px] items-center gap-6">
           <div>
-            <h1 className="text-[38px] leading-[1.1] font-bold">Where India's skills<br /><span className="text-cyan glow-text">meet its jobs</span></h1>
-            <p className="text-ink2 mt-4 text-[15px] max-w-[440px]">Compare what employers need with what the workforce has, state by state, forecast the gaps, and decide where to train next.</p>
+            <h1 className="text-[38px] leading-[1.1] font-bold">Where India's skills<br /><span className="text-cyan">meet its jobs</span></h1>
+            <p className="text-ink2 mt-4 text-[16px] max-w-[440px]">See which skills are needed where, and where to train next.</p>
             <div className="flex flex-wrap gap-2 mt-6">
               {[[fmt.compact(meta.counts.postings), "job postings analysed"], [meta.counts.skills, "skills tracked"], [fmt.compact(meta.counts.centres), "training centres mapped"], [meta.counts.districts, "districts"]].map(([v, l]) => (
-                <div key={l} className="glass px-3 py-2"><div className="text-[18px] font-semibold num">{v}</div><div className="text-[11px] text-muted">{l}</div></div>
+                <div key={l} className="panel px-3 py-2"><div className="text-[18px] font-semibold num">{v}</div><div className="text-[12px] text-muted">{l}</div></div>
               ))}
             </div>
           </div>
           <div className="h-[380px]"><IndiaGlow geo={geo} /></div>
         </div>
-        <div className="text-[11.5px] text-muted">Built for governments, colleges, industry and students.</div>
+        <div className="text-[13px] text-muted">For government, colleges, employers and students.</div>
       </section>
 
       <section className="flex items-center justify-center p-6">
         <div className="w-full max-w-[440px]">
           <div className="panel p-6">
-            <div className="flex rounded-lg bg-[#0a1122] border border-line p-0.5 mb-5">
+            <div role="tablist" className="flex rounded-lg bg-field border border-line p-0.5 mb-5">
               {[["signin", "Sign in"], ["signup", "Create account"]].map(([k, l]) => (
-                <button key={k} onClick={() => { setTab(k); setErr(""); }} className={`flex-1 py-2 rounded-md text-[13.5px] ${tab === k ? "bg-accent text-white" : "text-ink2"}`}>{l}</button>
+                <button key={k} role="tab" aria-selected={tab === k} onClick={() => { setTab(k); setErr(""); }} className={`flex-1 py-2 rounded-md text-[14.5px] ${tab === k ? "bg-accent text-onaccent font-semibold" : "text-ink2"}`}>{l}</button>
               ))}
             </div>
 
@@ -85,7 +87,7 @@ export default function Login({ meta, geo, onSession }) {
                 <Field label="Email"><input type="text" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" placeholder="you@example.com" className="w-full" /></Field>
                 <Field label="Password">
                   <div className="relative">
-                    <input type={show ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" className="w-full pr-9 bg-[#0a1122] border border-line rounded-[9px] px-[10px] py-[7px] text-[13px] outline-none focus:border-accent" />
+                    <input type={show ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" className="w-full pr-9" />
                     <button type="button" onClick={() => setShow(!show)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted" aria-label="Show password">{show ? <EyeOff size={15} /> : <Eye size={15} />}</button>
                   </div>
                 </Field>
@@ -98,14 +100,14 @@ export default function Login({ meta, geo, onSession }) {
                     const Icon = r.icon;
                     return (
                       <button type="button" key={k} onClick={() => setForm({ ...form, role: k })}
-                        className={`text-left rounded-xl border p-2.5 transition ${form.role === k ? "border-cyan bg-cyan/10" : "border-line hover:border-accent"}`}>
-                        <Icon size={16} className="text-cyan mb-1" /><div className="text-[12.5px] font-semibold leading-tight">{r.label}</div>
-                        <div className="text-[10.5px] text-muted leading-snug mt-0.5">{r.sub}</div>
+                        aria-pressed={form.role === k} className={`text-left rounded-xl border p-2.5 transition ${form.role === k ? "border-accent bg-accent/10 ring-1 ring-accent" : "border-line hover:border-accent"}`}>
+                        <Icon size={16} className="text-cyan mb-1" /><div className="text-[13.5px] font-semibold leading-tight">{r.label}</div>
+                        <div className="text-[12px] text-muted leading-snug mt-0.5">{r.sub}</div>
                       </button>
                     );
                   })}
                 </div>
-                <div className="text-[11.5px] text-ink2 bg-[#0a1122] border border-line rounded-lg px-3 py-2">{ROLES[form.role].can}</div>
+                <div className="text-[12.5px] text-ink2 bg-panel2 border border-line rounded-lg px-3 py-2">{ROLES[form.role].can}</div>
                 <Field label="Full name"><input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full" /></Field>
                 <div className="grid grid-cols-2 gap-2">
                   <Field label={form.role === "student" ? "College / school (optional)" : "Organisation"}><input type="text" value={form.organisation} onChange={(e) => setForm({ ...form, organisation: e.target.value })} className="w-full" /></Field>
@@ -114,7 +116,7 @@ export default function Login({ meta, geo, onSession }) {
                   </Field>
                 </div>
                 <Field label="Email"><input type="text" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} autoComplete="username" className="w-full" /></Field>
-                <Field label="Password (8+ characters, letters and numbers)"><input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" className="w-full bg-[#0a1122] border border-line rounded-[9px] px-[10px] py-[7px] text-[13px] outline-none focus:border-accent" /></Field>
+                <Field label="Password (8+ characters, letters and numbers)"><input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" className="w-full" /></Field>
                 {!SELF_SERVICE.includes(form.role) && (
                   <Field label="Government invite code"><input type="text" value={form.invite_code} onChange={(e) => setForm({ ...form, invite_code: e.target.value })} placeholder="Given by the administrator" className="w-full" /></Field>
                 )}
@@ -122,7 +124,7 @@ export default function Login({ meta, geo, onSession }) {
               </form>
             )}
 
-            {err && <div role="alert" className="mt-3 text-[12.5px] rounded-lg border border-crit/50 bg-crit/10 text-[#f39b93] px-3 py-2">{err}</div>}
+            {err && <div role="alert" className="mt-3 text-[13.5px] rounded-lg border border-crit/50 bg-crit/10 text-crit px-3 py-2">{err}</div>}
 
             <div className="mt-5">
               <div className="eyebrow mb-2">Try a demo account</div>
@@ -130,16 +132,16 @@ export default function Login({ meta, geo, onSession }) {
                 {DEMO_USERS.map((u) => {
                   const r = ROLES[u.role], Icon = r.icon;
                   return (
-                    <button key={u.email} disabled={busy} onClick={() => demo(u)} className="flex items-center gap-2 rounded-lg border border-line px-2.5 py-2 text-left hover:border-cyan disabled:opacity-50">
-                      <Icon size={15} className="text-cyan shrink-0" /><span className="text-[12px] leading-tight">{r.label}</span>
+                    <button key={u.email} disabled={busy} onClick={() => demo(u)} className="flex items-center gap-2 rounded-lg border border-line px-2.5 py-2 text-left hover:border-accent disabled:opacity-50">
+                      <Icon size={15} className="text-cyan shrink-0" /><span className="text-[13px] leading-tight">{r.label}</span>
                     </button>
                   );
                 })}
               </div>
-              <div className="text-[11px] text-muted mt-2">Demo password for all four: <code className="text-ink2">{DEMO_PASSWORD}</code></div>
+              <div className="text-[12px] text-muted mt-2">Demo password for all four: <code className="text-ink2">{DEMO_PASSWORD}</code></div>
             </div>
           </div>
-          <div className="mt-3 text-[11.5px] text-muted flex gap-1.5">
+          <div className="mt-3 text-[12.5px] text-muted flex gap-1.5">
             {mode === "server"
               ? <><ShieldCheck size={14} className="text-good shrink-0" />Secure sign-in: passwords are hashed on the server and each session is a signed token that expires in 12 hours.</>
               : mode === "demo"
@@ -148,13 +150,13 @@ export default function Login({ meta, geo, onSession }) {
           </div>
         </div>
       </section>
-    </div>
+    </div></div>
   );
 }
 
-const Field = ({ label, children }) => <label className="block"><span className="text-[12px] text-muted">{label}</span><div className="mt-1">{children}</div></label>;
+const Field = ({ label, children }) => <label className="block"><span className="text-[13px] text-muted">{label}</span><div className="mt-1">{children}</div></label>;
 const Submit = ({ busy, label }) => (
-  <button disabled={busy} className="w-full rounded-lg bg-accent py-2.5 text-[14px] font-medium flex items-center justify-center gap-2 hover:brightness-110 disabled:opacity-60">
+  <button disabled={busy} className="w-full rounded-lg bg-accent text-onaccent py-2.5 text-[14px] font-semibold flex items-center justify-center gap-2 hover:brightness-110 disabled:opacity-60">
     {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}{label}
   </button>
 );
